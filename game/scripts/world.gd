@@ -3,12 +3,17 @@ extends Node3D
 ## 惑星・空・光。ゲームの舞台そのもの。
 
 const R := 20.0
+# 星空がカメラの回転について来る割合。0 で宇宙に固定（走ると速く流れて目が疲れる）、1 で画面に貼り付く（走っている感じが無くなる）
+const SKY_FOLLOW := 0.75
 
 var env: Environment
 var sky_mat: ShaderMaterial
 var light: DirectionalLight3D
 var rng := RandomNumberGenerator.new()
 var dawn := 0.0
+var _sky_q := Quaternion.IDENTITY
+var _frame_q := Quaternion.IDENTITY
+var _frame_ready := false
 
 
 var compat := false
@@ -76,6 +81,15 @@ func update_frame(up: Vector3, fwd: Vector3, right: Vector3) -> void:
 	var ld := (-up * 1.0 + right * 0.5 - fwd * 0.35).normalized()
 	light.global_transform = Transform3D(Basis.looking_at(ld, fwd), Vector3.ZERO)
 	sky_mat.set_shader_parameter("glow_dir", (fwd * 0.9 + up * 0.15).normalized())
+	var q := Basis(right, up, -fwd).orthonormalized().get_rotation_quaternion()
+	if _frame_ready:
+		var delta := (q * _frame_q.inverse()).normalized()
+		# やり直しなどで向きが飛んだ時は、ついて来させない（星空が一気に回るのを避ける）
+		if delta.get_angle() < 0.5:
+			_sky_q = (Quaternion.IDENTITY.slerp(delta, SKY_FOLLOW) * _sky_q).normalized()
+	_frame_q = q
+	_frame_ready = true
+	sky_mat.set_shader_parameter("sky_rot", Basis(_sky_q).inverse())
 
 
 func rand_dir() -> Vector3:
