@@ -14,6 +14,46 @@ func _eyes(mk: MeshKit, x: float, y: float, z: float, r: float, col := Color.WHI
 		mk.sphere(Vector3(x * sx * 0.95, y - r * 0.1, z - r * 0.72), r * 0.5, Color("1b1b2f"), Vector3.ONE, 6)
 
 
+## ハートの形。輪郭を数式で描き、中心へ縮めながら前後へ押し出して丸く膨らませる。
+## 玉と円すいを組み合わせる作り方だと、継ぎ目に段差ができてハートに見えない
+func _heart_mesh(color: Color) -> ArrayMesh:
+	const N := 36 # 輪郭の点の数
+	const M := 10 # 前後方向の分割
+	const SIZE := 0.45 / 16.0
+	const THICK := 0.2
+	var outline: Array[Vector2] = []
+	for i in N:
+		var t := TAU * i / N
+		var x := 16.0 * pow(sin(t), 3.0)
+		var y := 13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t)
+		outline.append(Vector2(x, y) * SIZE)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(0)
+	var lin := color.srgb_to_linear()
+	for i in N:
+		for j in M + 1:
+			var phi := -PI * 0.5 + PI * j / M
+			var o := outline[i] * cos(phi)
+			st.set_color(lin)
+			st.add_vertex(Vector3(o.x, o.y + 0.07, THICK * sin(phi)))
+	for i in N:
+		var i2 := (i + 1) % N
+		for j in M:
+			var a := i * (M + 1) + j
+			var b := i2 * (M + 1) + j
+			var c := i2 * (M + 1) + j + 1
+			var d := i * (M + 1) + j + 1
+			st.add_index(a)
+			st.add_index(b)
+			st.add_index(c)
+			st.add_index(a)
+			st.add_index(c)
+			st.add_index(d)
+	st.generate_normals()
+	return st.commit()
+
+
 func _build_enemy_meshes() -> void:
 	# モヤ:ぷにっとした影
 	var c: Color = Game.ETYPES.moya.color
@@ -83,10 +123,7 @@ func _build_enemy_meshes() -> void:
 
 	# 特別なアイテム
 	mk = MeshKit.new()
-	mk.sphere(Vector3(0.17, 0.12, 0), 0.24, Color("ff4d6d"), Vector3.ONE, 10)
-	mk.sphere(Vector3(-0.17, 0.12, 0), 0.24, Color("ff4d6d"), Vector3.ONE, 10)
-	mk.cone(Vector3(0, -0.17, 0), 0.36, 0.5, Color("ff4d6d"), Vector3(PI, 0, 0), 10)
-	special_meshes["heart"] = mk.build()
+	special_meshes["heart"] = _heart_mesh(Color("ff4d6d"))
 	mk = MeshKit.new()
 	for i in 5:
 		var a := TAU * i / 5.0
