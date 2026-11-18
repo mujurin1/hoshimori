@@ -40,6 +40,17 @@ static func elite_material() -> ShaderMaterial:
 	return _elite
 
 
+static var _ghost: ShaderMaterial
+
+
+## ダッシュの無敵中のプレイヤー用。画面の点を間引いて、薄くなったように見せる。
+static func ghost_material() -> ShaderMaterial:
+	if _ghost == null:
+		_ghost = ShaderMaterial.new()
+		_ghost.shader = load("res://shaders/entity_dither.gdshader")
+	return _ghost
+
+
 static func glow_material() -> ShaderMaterial:
 	if _glow == null:
 		_glow = ShaderMaterial.new()

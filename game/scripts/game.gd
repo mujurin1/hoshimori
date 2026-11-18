@@ -11,6 +11,14 @@ const CAM_H := 14.5
 const CAM_B := 10.5
 const BASE_SPEED := 7.2
 const DASH_CD := 1.8
+# 被弾した時の点滅。BLINK_TIME 秒のあいだ、BLINK_PERIOD 秒ごとに BLINK_OFF 秒だけ体を消す
+const BLINK_TIME := 0.9
+const BLINK_PERIOD := 0.2
+const BLINK_OFF := 0.07
+# ダッシュの無敵時間。この間は体を網点で薄くして、無敵だと分かるようにする
+const DASH_IFRAME := 0.32
+# 向きを変える速さの上限（ラジアン毎秒）
+const TURN_MAX := 18.0
 
 const ETYPES := {
 	"moya": {"hp": 6.0, "speed": 2.7, "radius": 0.6, "dmg": 8.0, "xp": 1, "hop": 7.0, "color": Color("b07cf7")},
@@ -103,11 +111,16 @@ var cam_fwd := Vector3.FORWARD
 var p_hp := 100.0
 var p_max_hp := 100.0
 var p_iframe := 0.0
+var p_blink := 0.0
+var p_ghost := 0.0
+var p_ghost_on := false
 var dash_t := 0.0
 var dash_cd := 0.0
 var dash_dir := Vector3.ZERO
 var walk_t := 0.0
 var moving := false
+# 走る姿（1）と立ち姿（0）の混ぜ具合。入力が 1〜2 フレーム途切れただけで姿勢がガクッと切り替わらないよう、少しずつ移す
+var move_k := 0.0
 
 var level := 1
 var xp := 0.0
@@ -196,6 +209,15 @@ func _build_player() -> void:
 	foot_r.mesh = fm
 	foot_r.material_override = MeshKit.material()
 	p_node.add_child(foot_r)
+	# 網点のシェーダを起動時に 1 度描かせておく。初めて描く瞬間に GPU 向けの準備が走り、最初のダッシュで一瞬固まるため。
+	# 体の中に埋めた小さな部品なので見えない。足と同じメッシュを使うのは、頂点の形式が違うと準備が別になるため
+	var warm := MeshInstance3D.new()
+	warm.mesh = fm
+	warm.material_override = MeshKit.ghost_material()
+	warm.position = Vector3(0, 0.5, 0)
+	warm.scale = Vector3.ONE * 0.05
+	warm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p_node.add_child(warm)
 	p_light = OmniLight3D.new()
 	p_light.light_color = Color(1.0, 0.86, 0.6)
 	p_light.light_energy = 2.2
@@ -345,6 +367,9 @@ func reset() -> void:
 	p_max_hp = 100.0
 	p_hp = p_max_hp
 	p_iframe = 1.0
+	p_blink = 0.0
+	p_ghost = 0.0
+	move_k = 0.0
 	dash_t = 0.0
 	dash_cd = 0.0
 	level = 1
@@ -489,22 +514,22 @@ func _title_camera(dt: float) -> void:
 	cam.global_transform = Transform3D(Basis.looking_at(target - cpos, Vector3.UP), cpos)
 	world.update_frame(d, Vector3.UP, right)
 	walk_t += dt * 3.0
-	_pose_player(sin(walk_t) * 0.04, false)
+	_pose_player(sin(walk_t) * 0.04, 0.0)
 
 
 func _place_player() -> void:
-	_pose_player(0.0, false)
+	_pose_player(0.0, 0.0)
 
 
-func _pose_player(bob: float, lean: bool) -> void:
+func _pose_player(bob: float, lean: float) -> void:
 	var r := p_fwd.cross(p_dir).normalized()
 	var b := Basis(r, p_dir, -p_fwd)
-	if lean:
-		b = b.rotated(r, -0.16)
+	if lean > 0.001:
+		b = b.rotated(r, -0.16 * lean)
 	p_node.transform = Transform3D(b * Basis.from_scale(Vector3(1.0, 1.0, 1.0)), p_dir * (R + bob))
 	var sw := sin(walk_t)
-	foot_l.position = Vector3(0.2, 0.1 + maxf(0.0, sw) * 0.14, -sw * 0.24 if moving else 0.0)
-	foot_r.position = Vector3(-0.2, 0.1 + maxf(0.0, -sw) * 0.14, sw * 0.24 if moving else 0.0)
+	foot_l.position = Vector3(0.2, 0.1 + maxf(0.0, sw) * 0.14, -sw * 0.24 * lean)
+	foot_r.position = Vector3(-0.2, 0.1 + maxf(0.0, -sw) * 0.14, sw * 0.24 * lean)
 
 
 func move_input() -> Vector2:
@@ -581,13 +606,23 @@ func request_dash() -> void:
 	dash_dir = mv.normalized() if mv.length() > 0.1 else p_fwd
 	dash_t = 0.17
 	dash_cd = DASH_CD
-	p_iframe = maxf(p_iframe, 0.32)
+	p_iframe = maxf(p_iframe, DASH_IFRAME)
+	p_ghost = DASH_IFRAME
 	Sfx.play("dash", -6.0, rng.randf_range(0.95, 1.08))
-	fx.burst(p_dir * (R + 0.5), -dash_dir, Color(0.8, 0.95, 1.0), 12, 6.0, 0.22, 0.4)
+	# 出だしの煙。暗めの色にして、光の粒でなく煙に見せる
+	fx.burst(p_dir * (R + 0.4), p_dir, Color(0.34, 0.38, 0.44), 9, 2.6, 0.5, 0.55)
 
 
 func _update_player(dt: float) -> void:
 	p_iframe = maxf(p_iframe - dt, 0.0)
+	p_blink = maxf(p_blink - dt, 0.0)
+	p_ghost = maxf(p_ghost - dt, 0.0)
+	if (p_ghost > 0.0) != p_ghost_on:
+		p_ghost_on = p_ghost > 0.0
+		var m: Material = MeshKit.ghost_material() if p_ghost_on else MeshKit.material()
+		p_body.material_override = m
+		foot_l.material_override = m
+		foot_r.material_override = m
 	dash_cd = maxf(dash_cd - dt, 0.0)
 	var inp := Vector2.ZERO
 	if alive and not ending:
@@ -609,15 +644,25 @@ func _update_player(dt: float) -> void:
 			dash_dir = (dash_dir - p_dir * dash_dir.dot(p_dir)).normalized()
 		var f := mv - p_dir * mv.dot(p_dir)
 		if f.length() > 0.01:
-			p_fwd = p_fwd.lerp(f.normalized(), 1.0 - exp(-16.0 * dt))
+			# 向きは角度で回す。2 本の向きを混ぜる方法（lerp）だと、真後ろへ切り返した時に打ち消し合って回らず、前を向いたまま後ろへ歩く
+			var turn := p_fwd.signed_angle_to(f.normalized(), p_dir)
+			# 1 フレームで回る角度に上限を付ける（毎秒 18 ラジアン）。真後ろへは 0.2 秒弱かけて回る
+			var step := clampf(turn * (1.0 - exp(-16.0 * dt)), -TURN_MAX * dt, TURN_MAX * dt)
+			p_fwd = p_fwd.rotated(p_dir, step)
 		walk_t += dt * 13.0
 	p_fwd -= p_dir * p_fwd.dot(p_dir)
 	if p_fwd.length_squared() < 0.0001:
 		p_fwd = cam_fwd
 	p_fwd = p_fwd.normalized()
-	var bob := absf(sin(walk_t)) * 0.13 if moving else sin(elapsed * 2.5) * 0.025
-	_pose_player(bob, moving)
-	p_node.visible = alive and not (p_iframe > 0.0 and fmod(p_iframe, 0.14) < 0.06 and dash_t <= 0.0)
+	move_k = lerpf(move_k, 1.0 if moving else 0.0, 1.0 - exp(-14.0 * dt))
+	var bob := lerpf(sin(elapsed * 2.5) * 0.025, absf(sin(walk_t)) * 0.13, move_k)
+	_pose_player(bob, move_k)
+	# 点滅させるのは体だけ。p_node ごと消すと、子の明かりも消えて周りの地面まで明滅する
+	p_node.visible = alive
+	var body_on := not (p_blink > 0.0 and fmod(p_blink, BLINK_PERIOD) < BLINK_OFF)
+	p_body.visible = body_on
+	foot_l.visible = body_on
+	foot_r.visible = body_on
 	if gem_combo_t > 0.0:
 		gem_combo_t -= dt
 		if gem_combo_t <= 0.0:
@@ -991,6 +1036,7 @@ func hurt_player(amount: float, from_pos: Vector3) -> void:
 	if p_iframe > 0.0 or not alive or ending:
 		return
 	p_iframe = 0.9
+	p_blink = BLINK_TIME
 	fx.shake(0.55)
 	Sfx.play("hurt", -3.0)
 	main.on_player_hurt()
