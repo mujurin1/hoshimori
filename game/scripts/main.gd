@@ -68,7 +68,7 @@ func _parse_args() -> void:
 		elif a.begins_with("--diff="):
 			game.difficulty = int(a.substr(7))
 		elif a.begins_with("--botlag="):
-			game.bot_lag = int(a.substr(9))
+			game.bot_ai.bot_lag = int(a.substr(9))
 		elif a.begins_with("--seed="):
 			game.rng.seed = int(a.substr(7))
 	game.bot = a_bot
@@ -195,7 +195,7 @@ func _unhandled_input(ev: InputEvent) -> void:
 				_key(KEY_RIGHT)
 			JOY_BUTTON_B:
 				if st == St.PLAY:
-					game.request_dash()
+					game.player.request_dash()
 
 
 func _key(k: Key) -> void:
@@ -223,7 +223,7 @@ func _key(k: Key) -> void:
 			if k == KEY_ESCAPE or k == KEY_P:
 				toggle_pause()
 			elif k == KEY_SPACE or k == KEY_SHIFT:
-				game.request_dash()
+				game.player.request_dash()
 		St.LEVELUP:
 			if k == KEY_LEFT or k == KEY_A:
 				hud.move_sel(-1)
