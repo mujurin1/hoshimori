@@ -1,0 +1,10 @@
+{
+  "allow": [
+    {
+      "rule": "email",
+      "match": "freetype(-devel)?@nongnu\\.org",
+      "files": "docs/index.wasm",
+      "reason": "Godot に同梱の FreeType のライセンス文中の連絡先（個人情報でない）"
+    }
+  ]
+}

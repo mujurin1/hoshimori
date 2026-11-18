@@ -1,0 +1,7 @@
+# Godot のキャッシュ（ローカルのパスを含む。起動時に作り直される）
+game/.godot/
+# 書き出し設定（テンプレートの絶対パスが入る。書き出しの時にその場で生成する）
+game/export_presets.cfg
+# 音の中間ファイル
+audio-src/build/
+__pycache__/
