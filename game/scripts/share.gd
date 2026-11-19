@@ -56,11 +56,12 @@ const JS_HELPER := """
 			var w = window.open(a.intent, '_blank');
 			if (w) { w.opener = null; done('opened'); } else { done('blocked'); }
 		} else if (kind === 'share' && navigator.share) {
-			navigator.share({ text: a.text, url: a.url }).then(function () { done('shared'); }, function (e) {
+			// url を渡すと、本文の URL と合わせて共有先で二重になる
+			navigator.share({ text: a.text }).then(function () { done('shared'); }, function (e) {
 				done(e && e.name === 'AbortError' ? 'cancel' : 'failed');
 			});
 		} else {
-			copy(a.copy);
+			copy(a.text);
 		}
 	}
 	window.hoshiShare = {
@@ -95,23 +96,25 @@ func can_share() -> bool:
 	return web and bool(JavaScriptBridge.eval("window.hoshiShare.canShare()", true))
 
 
+## X・navigator.share・コピーで同じ 4 行(本文 2 行 + タグ + URL)。
+static func full_text(text: String) -> String:
+	return "%s\n#%s\n%s" % [text, TAG, URL]
+
+
+# url= と hashtags= を使うと、X が URL の後ろにタグを付けて行の順番が崩れる。全部 text に入れる
 static func intent_url(text: String) -> String:
-	return "https://twitter.com/intent/tweet?text=%s&url=%s&hashtags=%s" % [text.uri_encode(), URL.uri_encode(), TAG.uri_encode()]
-
-
-static func copy_text(text: String) -> String:
-	return "%s\n%s #%s" % [text, URL, TAG]
+	return "https://twitter.com/intent/tweet?text=%s" % full_text(text).uri_encode()
 
 
 ## kind は "x" か "share"。wait はキーやマウスで押した時に true(離した時の DOM イベントの中で実行する)。
 func run(kind: String, text: String, wait: bool) -> void:
 	if web:
-		var a := {"intent": intent_url(text), "text": text, "url": URL, "copy": copy_text(text)}
+		var a := {"intent": intent_url(text), "text": full_text(text)}
 		JavaScriptBridge.eval("window.hoshiShare.run(%s, %s, %s)" % [JSON.stringify(kind), JSON.stringify(a), "true" if wait else "false"], true)
 	elif kind == "x":
 		finished.emit("opened" if OS.shell_open(intent_url(text)) == OK else "failed")
 	else:
-		DisplayServer.clipboard_set(copy_text(text))
+		DisplayServer.clipboard_set(full_text(text))
 		finished.emit("copied")
 
 

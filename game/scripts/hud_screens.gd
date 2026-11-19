@@ -295,7 +295,7 @@ func show_over(victory: bool, g: Game, new_record: bool) -> void:
 		over_title.text = "夜が明けた!"
 		over_title.add_theme_color_override("font_color", Color("ffe89a"))
 		over_note.text = "星は守られた。おつかれさま!"
-		share_text = "ほしもり「%s」で夜明けを迎えた！ %d:%02d / Lv.%d / 撃破 %d" % [dname, tm / 60, tm % 60, g.level, g.kills]
+		share_text = "ほしもり「%s」で夜明けを迎えた！\nLv.%d / %d:%02d / 撃破 %d" % [dname, g.level, tm / 60, tm % 60, g.kills]
 	else:
 		over_title.text = "力つきた…"
 		over_title.add_theme_color_override("font_color", Color("b9c6ff"))
@@ -304,7 +304,7 @@ func show_over(victory: bool, g: Game, new_record: bool) -> void:
 			over_note.text = "夜明けは目の前だった…!"
 		else:
 			over_note.text = "夜明けまで、あと %d:%02d" % [int(remain) / 60, int(remain) % 60]
-		share_text = "ほしもり「%s」%d:%02d で力尽きた… / Lv.%d / 撃破 %d" % [dname, tm / 60, tm % 60, g.level, g.kills]
+		share_text = "ほしもり「%s」で力尽きた…\nLv.%d / %d:%02d / 撃破 %d" % [dname, g.level, tm / 60, tm % 60, g.kills]
 	if new_record:
 		over_note.text += "   ★ 新記録!"
 	over_diff.text = "むずかしさ   %s" % dname
