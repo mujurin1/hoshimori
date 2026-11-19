@@ -29,7 +29,9 @@
 |---|---|
 | `game/` | ゲーム本体(Godot 4.7 のプロジェクト。GDScript) |
 | `audio-src/` | 効果音と BGM を合成する Python スクリプト(`build_all.py` で `game/audio/` に作り直せる。numpy、scipy、pyloudnorm、ffmpeg が要る) |
-| `docs/` | ブラウザ版(Godot の Web 書き出し。スレッドなし版) |
+| `docs/` | ブラウザ版(Godot の Web 書き出し。スレッドなし版)と、リンクのカード画像 `ogp.png` |
+| `web-head.html` | ブラウザ版のページの head に入れるタグ(リンクのカードのタイトル・説明・画像)。書き出しの時に Head Include へ入れる |
+| `ogp/` | カード画像を作り直す一式(Godot で場面を描き、Edge で題字を重ねる。`ogp/README.md`) |
 | `.claude/_knowledge/` | この作品を作って分かったこと |
 
 モデル、効果音、BGM はすべてコードから生成している。画像や音声の素材ファイルは使っていない。
