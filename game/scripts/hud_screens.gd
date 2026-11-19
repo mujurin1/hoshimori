@@ -16,6 +16,15 @@ var over_box: Control
 var over_title: Label
 var over_stats: Label
 var over_note: Label
+var over_diff: Label
+var over_share: Button
+var over_toast: Label
+var share: Share
+var share_text := ""
+var _toast_tw: Tween
+
+const DIFF_NAMES := ["やさしい", "ふつう", "むずかしい"]
+const DIFF_COLORS := [Color("b9fbc0"), Color("ffe89a"), Color("ff9e9e")]
 
 
 # ---------------------------------------------------------------- タイトル
@@ -74,8 +83,8 @@ func _build_title() -> void:
 
 
 func set_diff(d: int) -> void:
-	title_diff.text = "むずかしさ   ←  %s  →" % ["やさしい", "ふつう", "むずかしい"][d]
-	title_diff.add_theme_color_override("font_color", [Color("b9fbc0"), Color("ffe89a"), Color("ff9e9e")][d])
+	title_diff.text = "むずかしさ   ←  %s  →" % DIFF_NAMES[d]
+	title_diff.add_theme_color_override("font_color", DIFF_COLORS[d])
 
 
 func set_best(best: Dictionary) -> void:
@@ -224,6 +233,9 @@ func _build_pause() -> void:
 
 # ---------------------------------------------------------------- 結果
 func _build_over() -> void:
+	share = Share.new()
+	add_child(share)
+	share.finished.connect(_on_share_finished)
 	over_box = _full(Control.new())
 	root.add_child(over_box)
 	var shade := ColorRect.new()
@@ -235,19 +247,55 @@ func _build_over() -> void:
 	v.add_child(over_title)
 	over_note = _centered(_label("", 30, Color("ffd6a5"), font_b, 8))
 	v.add_child(over_note)
+	over_diff = _centered(_label("", 32, Color("ffe89a"), font_x, 8))
+	v.add_child(over_diff)
 	over_stats = _centered(_label("", 36, Color("e3ebff"), font_b, 8))
 	v.add_child(over_stats)
 	var sp := Control.new()
 	sp.custom_minimum_size = Vector2(0, 16)
 	v.add_child(sp)
 	v.add_child(_centered(_label("スペース / Enter : もういちど     Esc : タイトルへ", 30, Color.WHITE, font_x, 8)))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 24)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	v.add_child(row)
+	row.add_child(_share_button("X で共有   [X]", "x"))
+	over_share = _share_button("", "share")
+	row.add_child(over_share)
+	over_toast = _centered(_label("", 24, Color("b9fbc0"), font_b, 6))
+	over_toast.custom_minimum_size = Vector2(0, 34)
+	v.add_child(over_toast)
+
+
+func _share_button(text: String, kind: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	# フォーカスを持たせない。持つと スペース / Enter をボタンが取り、「もういちど」が効かなくなる
+	b.focus_mode = Control.FOCUS_NONE
+	# 押した瞬間に予約し、離した時の DOM イベントの中で開く(Share の説明)
+	b.action_mode = BaseButton.ACTION_MODE_BUTTON_PRESS
+	b.custom_minimum_size = Vector2(220, 52)
+	b.add_theme_font_override("font", font_b)
+	b.add_theme_font_size_override("font_size", 24)
+	b.add_theme_color_override("font_color", Color("e3ebff"))
+	b.add_theme_color_override("font_hover_color", Color.WHITE)
+	b.add_theme_color_override("font_pressed_color", Color("ffe89a"))
+	b.add_theme_stylebox_override("normal", _box(Color(0.07, 0.09, 0.22, 0.85), 14, 2, Color(0.75, 0.82, 1.0, 0.45)))
+	b.add_theme_stylebox_override("hover", _box(Color(0.13, 0.16, 0.36, 0.95), 14, 2, Color(0.85, 0.9, 1.0, 0.85)))
+	b.add_theme_stylebox_override("pressed", _box(Color(0.18, 0.2, 0.42, 0.95), 14, 2, Color("ffe89a")))
+	b.pressed.connect(func() -> void: main.share_result(kind, true))
+	return b
 
 
 func show_over(victory: bool, g: Game, new_record: bool) -> void:
+	var tm := int(g.elapsed)
+	var dname: String = DIFF_NAMES[g.difficulty]
 	if victory:
 		over_title.text = "夜が明けた!"
 		over_title.add_theme_color_override("font_color", Color("ffe89a"))
 		over_note.text = "星は守られた。おつかれさま!"
+		share_text = "ほしもり「%s」で夜明けを迎えた！ %d:%02d / Lv.%d / 撃破 %d" % [dname, tm / 60, tm % 60, g.level, g.kills]
 	else:
 		over_title.text = "力つきた…"
 		over_title.add_theme_color_override("font_color", Color("b9c6ff"))
@@ -256,11 +304,39 @@ func show_over(victory: bool, g: Game, new_record: bool) -> void:
 			over_note.text = "夜明けは目の前だった…!"
 		else:
 			over_note.text = "夜明けまで、あと %d:%02d" % [int(remain) / 60, int(remain) % 60]
+		share_text = "ほしもり「%s」%d:%02d で力尽きた… / Lv.%d / 撃破 %d" % [dname, tm / 60, tm % 60, g.level, g.kills]
 	if new_record:
 		over_note.text += "   ★ 新記録!"
-	var tm := int(g.elapsed)
-	over_stats.text = "生きのびた時間   %d:%02d\nたおした数   %d\nレベル   %d" % [tm / 60, tm % 60, g.kills, g.level]
+	over_diff.text = "むずかしさ   %s" % dname
+	over_diff.add_theme_color_override("font_color", DIFF_COLORS[g.difficulty])
+	over_stats.text = "%s   %d:%02d\nたおした数   %d\nレベル   %d" % ["プレイ時間" if victory else "生きのびた時間", tm / 60, tm % 60, g.kills, g.level]
+	over_share.text = "共有   [C]" if share.can_share() else "コピー   [C]"
+	over_toast.text = ""
 	over_box.visible = true
 	over_box.modulate.a = 0.0
 	var tw := create_tween()
 	tw.tween_property(over_box, "modulate:a", 1.0, 0.5)
+
+
+func run_share(kind: String, wait: bool) -> void:
+	share.run(kind, share_text, wait)
+
+
+func _on_share_finished(result: String) -> void:
+	var msg: String = {
+		"opened": "X の投稿画面を開いた",
+		"shared": "共有した",
+		"copied": "文面をコピーした",
+		"blocked": "新しいタブを開けなかった(ポップアップが止められた)",
+		"failed": "共有できなかった",
+	}.get(result, "")
+	if msg == "":
+		return
+	Sfx.play("select", -6.0)
+	over_toast.text = msg
+	over_toast.modulate.a = 1.0
+	if _toast_tw != null:
+		_toast_tw.kill()
+	_toast_tw = create_tween()
+	_toast_tw.tween_interval(2.0)
+	_toast_tw.tween_property(over_toast, "modulate:a", 0.0, 0.6)

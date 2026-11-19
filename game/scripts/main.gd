@@ -196,6 +196,10 @@ func _unhandled_input(ev: InputEvent) -> void:
 			JOY_BUTTON_B:
 				if st == St.PLAY:
 					game.player.request_dash()
+			JOY_BUTTON_X:
+				share_result("x", false)
+			JOY_BUTTON_Y:
+				share_result("share", false)
 
 
 func _key(k: Key) -> void:
@@ -251,6 +255,17 @@ func _key(k: Key) -> void:
 				start_game()
 			elif k == KEY_ESCAPE:
 				goto_title()
+			elif k == KEY_X:
+				share_result("x", true)
+			elif k == KEY_C:
+				share_result("share", true)
+
+
+## kind は "x" か "share"。wait はキーやマウスで押した時に true(ゲームパッドはブラウザの操作のイベントにならない)。
+func share_result(kind: String, wait: bool) -> void:
+	if st != St.OVER or Time.get_ticks_msec() < lock_until:
+		return
+	hud.run_share(kind, wait)
 
 
 var _stick_x := 0
